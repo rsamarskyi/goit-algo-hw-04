@@ -1,45 +1,57 @@
 import argparse
 import shutil
+import sys
 from pathlib import Path
 
-def read_directory(directory, destination):
+
+def copy_by_extension(directory: Path, destination: Path) -> None:
     try:
         for item in directory.iterdir():
+            if item.is_symlink():
+                continue
             if item.is_dir():
-                print("Directory: ", item)
-                read_directory(item, destination)
+                print("Directory:", item)
+                copy_by_extension(item, destination)
             elif item.is_file():
-                extension = item.suffix.lower().removeprefix(".")
-                if not extension:
-                    extension = "no_extension"
-                target_directory = destination/extension
+                extension = item.suffix.lower().removeprefix(".") or "no_extension"
+                target_directory = destination / extension
                 try:
                     target_directory.mkdir(parents=True, exist_ok=True)
-                    target_file = target_directory/item.name
+                    target_file = target_directory / item.name
                     counter = 1
                     while target_file.exists():
                         target_file = target_directory / f"{item.stem}_{counter}{item.suffix}"
                         counter += 1
                     shutil.copy2(item, target_file)
-                    print("File ", target_file," was copied")
-                except OSError as error:    
-                    print(item, error) 
+                    print("File", target_file, "was copied")
+                except OSError as error:
+                    print(f"Error copying {item}: {error}", file=sys.stderr)
     except OSError as error:
-        print(directory, error)
-parser = argparse.ArgumentParser()
-parser.add_argument("source")
-parser.add_argument("dest", nargs="?", default="dist")
+        print(f"Error reading {directory}: {error}", file=sys.stderr)
 
-args = parser.parse_args()
 
-path = Path(args.source).resolve()
-dest = Path(args.dest).resolve()
-print(path, dest)
-if not path.exists():
-    print("Path does not exist")
-elif not path.is_dir():
-    print("Path is not a directory")
-elif dest == path or dest.is_relative_to(path):
-    print("Destination folder should not be inside the source folder")
-else:
-    read_directory(path, dest)
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Copy files into subfolders by extension.")
+    parser.add_argument("source", help="source directory")
+    parser.add_argument("dest", nargs="?", default="dist", help="destination directory (default: dist)")
+    args = parser.parse_args()
+
+    source = Path(args.source).resolve()
+    dest = Path(args.dest).resolve()
+
+    if not source.exists():
+        print("Path does not exist", file=sys.stderr)
+        return 1
+    if not source.is_dir():
+        print("Path is not a directory", file=sys.stderr)
+        return 1
+    if dest == source or dest.is_relative_to(source):
+        print("Destination folder should not be inside the source folder", file=sys.stderr)
+        return 1
+
+    copy_by_extension(source, dest)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
